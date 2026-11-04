@@ -141,6 +141,17 @@ model Order {
   idempotencyKey String   @unique
   createdAt      DateTime @default(now())
   payments       Payment[]
+  refunds        Refund[]
+}
+
+model Refund {
+  id        String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  amountVnd BigInt
+  reason    String?
+  status    String   @default("REQUESTED")
+  createdAt DateTime @default(now())
 }
 
 model Payment {

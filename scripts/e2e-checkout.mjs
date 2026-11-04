@@ -117,5 +117,29 @@ check("admin can list orders", adminOrders.status === 200 && Array.isArray(admin
 const noToken = await call("/orders");
 check("orders requires auth", noToken.status === 401, String(noToken.status));
 
+// 18. current user profile
+const me = await call("/me", { token });
+check("me returns profile", me.status === 200 && me.json.email === "customer@autonova.local" && me.json.role === "CUSTOMER", JSON.stringify(me.json));
+
+// 19. cancelling a paid order must produce a refund, never silently drop the money
+const idem2 = `e2e-cancel-${Date.now()}`;
+const order3 = await call("/orders", { method: "POST", token, body: { quoteId, dealerId: dealer.id, idempotencyKey: idem2 } });
+const evt2 = { id: `evt-${Date.now()}-cancel`, type: "payment.succeeded", paymentId: order3.json.payments[0].id, amountVnd: order3.json.depositVnd };
+const raw2 = JSON.stringify(evt2);
+const sig2 = createHmac("sha256", SECRET).update(raw2).digest("hex");
+await fetch(`${API}/webhooks/payments/mock`, { method: "POST", headers: { "Content-Type": "application/json", "x-signature": sig2 }, body: raw2 });
+
+const cancelledOrder = await call(`/orders/${order3.json.id}/cancel`, { method: "POST", token, body: { reason: "Changed mind" } });
+check("paid order cancelled", [200, 201].includes(cancelledOrder.status) && cancelledOrder.json.status === "CANCELLED", JSON.stringify(cancelledOrder.json).slice(0, 300));
+check("refund requested for paid deposit", cancelledOrder.json?.refunds?.length === 1 && cancelledOrder.json.refunds[0].status === "REQUESTED", JSON.stringify(cancelledOrder.json?.refunds));
+check("payment marked refund pending", cancelledOrder.json?.payments?.[0]?.status === "REFUND_PENDING", JSON.stringify(cancelledOrder.json?.payments));
+
+const cancelAgain = await call(`/orders/${order3.json.id}/cancel`, { method: "POST", token, body: {} });
+check("double cancel rejected", cancelAgain.status === 400, String(cancelAgain.status));
+
+const other = await call("/auth/register", { method: "POST", body: { email: `other-${Date.now()}@example.com`, password: "Password123!", name: "Other" } });
+const forbiddenCancel = await call(`/orders/${order3.json.id}/cancel`, { method: "POST", token: other.json.token, body: {} });
+check("cross-user cancel forbidden", forbiddenCancel.status === 403, String(forbiddenCancel.status));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
