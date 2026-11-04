@@ -1,15 +1,51 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
+import { IsDateString, IsInt, IsString, Min } from 'class-validator';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+
+class CreateSlotDto {
+  @IsString()
+  dealerId!: string;
+
+  @IsDateString()
+  date!: string;
+
+  @IsString()
+  startTime!: string;
+
+  @IsInt()
+  @Min(1)
+  capacity!: number;
+}
+
 @Controller('admin')
 @UseGuards(AuthGuard)
 export class AdminController {
   constructor(private readonly prisma: PrismaService) {}
-  private requireAdmin(user: any) { if (!['ADMIN', 'DEALER_MANAGER'].includes(user.role)) throw new ForbiddenException('Admin only'); }
+
+  private requireAdmin(user: any) {
+    if (!['ADMIN', 'DEALER_MANAGER'].includes(user.role)) throw new ForbiddenException('Admin only');
+  }
+
   @Get('orders')
-  orders(@CurrentUser() user: any) { this.requireAdmin(user); return this.prisma.order.findMany({ include: { user: true, dealer: true, payments: true }, orderBy: { createdAt: 'desc' }, take: 100 }); }
+  orders(@CurrentUser() user: any) {
+    this.requireAdmin(user);
+    return this.prisma.order.findMany({ include: { user: true, dealer: true, payments: true }, orderBy: { createdAt: 'desc' }, take: 100 });
+  }
+
   @Get('audit-logs')
-  audit(@CurrentUser() user: any) { this.requireAdmin(user); return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }); }
+  audit(@CurrentUser() user: any) {
+    this.requireAdmin(user);
+    return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
+  }
+
+  @Post('test-drive-slots')
+  createSlot(@CurrentUser() user: any, @Body() dto: CreateSlotDto) {
+    this.requireAdmin(user);
+    return this.prisma.testDriveSlot.create({
+      data: { dealerId: dto.dealerId, date: new Date(dto.date), startTime: dto.startTime, capacity: dto.capacity },
+    });
+  }
 }

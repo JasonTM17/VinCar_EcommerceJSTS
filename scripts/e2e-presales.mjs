@@ -62,9 +62,20 @@ const financeBad = await call("/finance/simulate", { method: "POST", body: { pri
 check("finance invalid term rejected", financeBad.status === 400, String(financeBad.status));
 
 // --- test drive booking ---
+const adminLogin = await call("/auth/login", { method: "POST", body: { email: "admin@autonova.local", password: "Admin123!" } });
+const adminToken = adminLogin.json.token;
+check("admin login", [200, 201].includes(adminLogin.status) && !!adminToken, JSON.stringify(adminLogin.json));
+
+// Fresh slots per run keep this script idempotent.
+const slotDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+const slotA = await call("/admin/test-drive-slots", { method: "POST", token: adminToken, body: { dealerId: "dealer-hcm", date: slotDate, startTime: "10:00", capacity: 3 } });
+check("admin created slot", [200, 201].includes(slotA.status) && !!slotA.json.id, JSON.stringify(slotA.json));
+const slotB = await call("/admin/test-drive-slots", { method: "POST", token: adminToken, body: { dealerId: "dealer-hcm", date: slotDate, startTime: "14:00", capacity: 1 } });
+check("admin created race slot", [200, 201].includes(slotB.status) && !!slotB.json.id, JSON.stringify(slotB.json));
+
 const slots = await call(`/test-drive-slots?dealerId=dealer-hcm`);
 check("slots listed", slots.status === 200 && slots.json.length >= 2, JSON.stringify(slots.json).slice(0, 200));
-const slot = slots.json.find((s) => s.id === "slot-hcm-1");
+const slot = slotA.json;
 
 const booking = await call("/test-drives", { method: "POST", token, body: { dealerId: "dealer-hcm", slotId: slot.id, modelSlug: "nova-v8" } });
 check("test drive booked", [200, 201].includes(booking.status) && booking.json.status === "CONFIRMED", JSON.stringify(booking.json).slice(0, 300));
@@ -73,13 +84,13 @@ const duplicate = await call("/test-drives", { method: "POST", token, body: { de
 check("same user cannot double-book slot", duplicate.status === 409, String(duplicate.status));
 
 const mine = await call("/me/test-drives", { token });
-check("my bookings listed", mine.status === 200 && mine.json.length === 1, JSON.stringify(mine.json).slice(0, 200));
+check("my bookings listed", mine.status === 200 && mine.json.some((b) => b.id === booking.json.id), JSON.stringify(mine.json).slice(0, 200));
 
 const cancelled = await call(`/test-drives/${booking.json.id}/cancel`, { method: "POST", token });
 check("booking cancelled", [200, 201].includes(cancelled.status) && cancelled.json.status === "CANCELLED", JSON.stringify(cancelled.json).slice(0, 200));
 
 const slotsAfter = await call(`/test-drive-slots?dealerId=dealer-hcm`);
-const slotAfter = slotsAfter.json.find((s) => s.id === "slot-hcm-1");
+const slotAfter = slotsAfter.json.find((s) => s.id === slotA.json.id);
 check("capacity released after cancel", slotAfter.booked === 0, String(slotAfter.booked));
 
 // --- concurrency: 5 users race for a 1-seat slot ---
@@ -90,7 +101,7 @@ const users = await Promise.all(
 );
 check("5 racing users registered", users.every((u) => [200, 201].includes(u.status)), JSON.stringify(users.map((u) => u.status)));
 
-const raceSlot = slots.json.find((s) => s.id === "slot-hcm-2");
+const raceSlot = slotB.json;
 const results = await Promise.all(
   users.map((u, i) =>
     call("/test-drives", { method: "POST", token: u.json.token, body: { dealerId: "dealer-hcm", slotId: raceSlot.id, modelSlug: "nova-v8" } }),
@@ -101,7 +112,7 @@ const rejected = results.filter((r) => r.status === 409);
 check("exactly one racer wins the last seat", succeeded.length === 1, JSON.stringify(results.map((r) => r.status)));
 check("other racers rejected with 409", rejected.length === 4, JSON.stringify(results.map((r) => r.status)));
 
-const raceSlotAfter = (await call(`/test-drive-slots?dealerId=dealer-hcm`)).json.find((s) => s.id === "slot-hcm-2");
+const raceSlotAfter = (await call(`/test-drive-slots?dealerId=dealer-hcm`)).json.find((s) => s.id === slotB.json.id);
 check("slot booked count never exceeds capacity", raceSlotAfter.booked === 1 && raceSlotAfter.capacity === 1, JSON.stringify(raceSlotAfter));
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);

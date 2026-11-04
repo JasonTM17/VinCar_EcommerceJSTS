@@ -30,6 +30,9 @@ export class TestDriveService {
       if (!slot || slot.dealerId !== input.dealerId) throw new NotFoundException('Slot not found for this dealer');
       if (slot.date < new Date()) throw new ConflictException('Cannot book a past slot');
 
+      const existing = await tx.testDrive.findUnique({ where: { slotId_userId: { slotId: input.slotId, userId } } });
+      if (existing?.status === 'CONFIRMED') throw new ConflictException('You already have a booking for this slot');
+
       const updated = await tx.$executeRaw`
         UPDATE "TestDriveSlot"
         SET "booked" = "booked" + 1
@@ -38,6 +41,16 @@ export class TestDriveService {
           AND "booked" < "capacity"
       `;
       if (updated === 0) throw new ConflictException('Slot is full');
+
+      // A previously cancelled booking keeps its row so (slotId, userId) stays unique;
+      // reactivate it instead of inserting a duplicate.
+      if (existing) {
+        return tx.testDrive.update({
+          where: { id: existing.id },
+          data: { status: 'CONFIRMED' },
+          include: { slot: true, dealer: true },
+        });
+      }
 
       try {
         return await tx.testDrive.create({
