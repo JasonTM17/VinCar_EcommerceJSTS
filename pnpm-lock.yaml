@@ -20,6 +20,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@autonova/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
       '@autonova/pricing':
         specifier: workspace:*
         version: link:../../packages/pricing
@@ -121,6 +124,38 @@ importers:
       tailwindcss:
         specifier: 4.3.4
         version: 4.3.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  apps/worker:
+    dependencies:
+      '@autonova/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@prisma/client':
+        specifier: ^6.19.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
+      prisma:
+        specifier: ^6.19.0
+        version: 6.19.3(typescript@5.9.3)
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@24.19.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/outbox:
+    dependencies:
+      '@prisma/client':
+        specifier: ^6.19.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+    devDependencies:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

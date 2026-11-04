@@ -1,7 +1,7 @@
 # AutoNova — Intelligent Automotive Commerce Platform
 
 O2O car commerce monorepo: research → configure → on-road/finance estimate → quote →
-dealer test drive → deposit order → sandbox payment → allocation/delivery.
+dealer test drive → deposit order → sandbox payment → stock allocation → delivery.
 
 > AutoNova is an independent demo brand. It is not affiliated with, endorsed by, or a
 > copy of VinFast. All names, vehicles, prices and dealers here are fictional fixtures.
@@ -10,7 +10,7 @@ dealer test drive → deposit order → sandbox payment → allocation/delivery.
 
 | Layer | Choice |
 | --- | --- |
-| Storefront | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4 |
+| Storefront | Next.js 16 (App Router, standalone output), React 19, TypeScript, Tailwind CSS 4 |
 | API | NestJS 11, TypeScript strict, REST + Swagger at `/docs` |
 | Database | PostgreSQL 16 + Prisma 6 (money as `BigInt` VND) |
 | Cache/Queue | Redis 7 (provisioned) |
@@ -20,11 +20,11 @@ dealer test drive → deposit order → sandbox payment → allocation/delivery.
 ## Layout
 
 ```
-apps/api      NestJS REST API (auth, catalog, pricing, finance, quotes, orders,
-              payments, dealers, test drives, admin)
-apps/web      Next.js storefront
+apps/api      NestJS REST API (auth, catalog, pricing, promotions, finance, quotes,
+              orders, payments, dealers, test drives, inventory, notifications, audit, admin)
+apps/web      Next.js storefront + admin dashboard
 packages/     pricing (TS), shared-js (JS ESM + JSDoc)
-scripts/      end-to-end verification scripts
+scripts/      end-to-end verification and dev utilities
 docs/         product and architecture notes
 ```
 
@@ -39,7 +39,7 @@ pnpm install
 
 # 3. database
 cp apps/api/.env.example apps/api/.env
-pnpm db:push
+pnpm db:push          # or: pnpm --filter @autonova/api exec prisma migrate deploy
 pnpm db:seed
 
 # 4. app (API on :4000, web on :3000)
@@ -47,7 +47,7 @@ pnpm --filter @autonova/api start
 pnpm --filter @autonova/web dev
 ```
 
-Open http://localhost:3000 and http://localhost:4000/docs.
+Open http://localhost:3000, http://localhost:3000/admin, http://localhost:4000/docs.
 
 ### Demo accounts (fictional, seeded)
 
@@ -56,13 +56,22 @@ Open http://localhost:3000 and http://localhost:4000/docs.
 | Admin | `admin@autonova.local` | `Admin123!` |
 | Customer | `customer@autonova.local` | `Customer123!` |
 
+### Production containers
+
+```bash
+cp .env.example .env   # fill DB_PASSWORD and JWT_SECRET
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+The compose file runs migrations first, then starts the API and web containers.
+
 ## Verification
 
 ```bash
 pnpm test            # unit tests (shared-js, pricing, web, api)
 pnpm typecheck       # strict TypeScript across the workspace
 pnpm -r build        # production builds
-pnpm test:e2e        # 43 HTTP checks against a running API + seeded DB
+pnpm test:e2e        # 77 HTTP checks against a running API + seeded DB
 ```
 
 The end-to-end scripts prove, against the real API and a real PostgreSQL:
@@ -75,8 +84,14 @@ The end-to-end scripts prove, against the real API and a real PostgreSQL:
 - RBAC: a customer is forbidden from `/admin/*`, an admin is allowed;
 - configuration validation (valid build accepted, unknown color/option rejected);
 - on-road cost driven by effective-dated `OnRoadFeeRule` rows, not hard-coded values;
+- promotions: eligible auto-apply, explicit codes validated, expired and
+  trim-excluded codes rejected, `STACKABLE` combines on top of `EXCLUSIVE`;
 - finance amortisation (equal payment and equal principal, zero interest, rounding);
-- test-drive capacity: 5 concurrent users racing for a 1-seat slot → exactly 1 wins.
+- test-drive capacity: 5 concurrent users racing for a 1-seat slot → exactly 1 wins;
+- inventory: orders hold stock atomically, paid orders can be allocated a unit,
+  unpaid orders cannot, expired holds release safely;
+- notifications: transactional outbox dispatch is idempotent;
+- audit: order, payment, and cancellation changes leave a trace.
 
 ## Business rules enforced
 
@@ -88,13 +103,15 @@ The end-to-end scripts prove, against the real API and a real PostgreSQL:
 - Order creation is idempotent via a unique `idempotencyKey`.
 - Payment webhooks require an HMAC-SHA256 signature, a unique provider event id, and an
   amount that matches the recorded payment.
-- Test-drive seats are claimed with a single atomic conditional `UPDATE`, so the last
-  seat cannot be sold twice.
+- Test-drive seats and vehicle stock are claimed with single atomic conditional
+  `UPDATE` statements, so the last unit cannot be sold twice.
+- A cancelled paid order produces a `REQUESTED` refund and a `REFUND_PENDING` payment;
+  the money is never silently dropped.
 
 ## Known limitations
 
 - Payments use a mock gateway; no real money moves. Do not claim production payment
   readiness without a licensed provider integration and legal review.
-- Notifications, promotions, inventory allocation, refunds and analytics are modelled in
-  the schema but not yet implemented end to end.
-- No production deployment, CI pipeline, backup/restore runbook or load test yet.
+- Notifications are dispatched on demand through an admin endpoint; a production
+  deployment should consume the outbox with a real queue worker.
+- No load test, backup/restore runbook, or multi-region deployment yet.
