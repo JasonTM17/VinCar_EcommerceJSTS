@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node .next/standalone/apps/web/server.js",
     "test": "node --test src/lib/api.test.mjs",
     "typecheck": "tsc --noEmit"
   },

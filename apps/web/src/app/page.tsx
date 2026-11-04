@@ -1,4 +1,7 @@
 import { apiFetch, type Vehicle } from "@/lib/api";
+// The homepage renders live catalogue data, so it must be requested per visit
+// rather than prerendered while the API may be unavailable.
+export const dynamic = "force-dynamic";
 export default async function Home() {
   let vehicles: Vehicle[] = [];
   try { const data = await apiFetch<{ data: Vehicle[] }>("/vehicles"); vehicles = data.data; } catch { vehicles = []; }
