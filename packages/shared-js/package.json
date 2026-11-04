@@ -1,0 +1,10 @@
+{
+  "name": "@autonova/shared-js",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/format.js",
+  "scripts": {
+    "test": "node --test src/*.test.js",
+    "typecheck": "tsc --checkJs --allowJs --noEmit src/format.js src/slug.js"
+  }
+}

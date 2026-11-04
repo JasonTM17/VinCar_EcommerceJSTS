@@ -1,0 +1,7 @@
+import { apiFetch, type Vehicle } from "@/lib/api";
+export default async function Vehicles({ searchParams }: { searchParams: Promise<{ q?: string; category?: string; page?: string }> }) {
+  const sp = await searchParams;
+  const qs = new URLSearchParams(); if (sp.q) qs.set("q", sp.q); if (sp.category) qs.set("category", sp.category); qs.set("page", sp.page ?? "1");
+  const data = await apiFetch<{ data: Vehicle[]; meta: { total: number } }>(`/vehicles?${qs}`);
+  return (<main className="mx-auto max-w-7xl px-4 py-10"><h1 className="text-3xl font-bold">Danh sách xe</h1><form className="mt-6 flex gap-3"><input name="q" defaultValue={sp.q ?? ""} placeholder="Tìm xe..." className="rounded-lg border px-4 py-2" /><select name="category" defaultValue={sp.category ?? ""} className="rounded-lg border px-4 py-2"><option value="">Tất cả</option><option>SUV</option><option>Sedan</option><option>Van</option></select><button className="rounded-lg bg-[#0a1633] px-6 py-2 text-white">Lọc</button></form><div className="mt-8 grid gap-6 md:grid-cols-3">{data.data.map((v) => (<a key={v.id} href={`/vehicles/${v.slug}`} className="rounded-2xl border p-6"><h2 className="text-xl font-semibold">{v.brand.name} {v.name}</h2><p className="mt-1 text-neutral-500">{v.category} · {v.seats} chỗ · {v.powertrain}</p><p className="mt-3 text-cyan-700">Từ {v.trims[0]?.basePriceVnd} ₫</p></a>))}</div>{data.data.length === 0 && <p className="mt-8">Không tìm thấy xe.</p>}<p className="mt-6 text-sm">Tổng: {data.meta.total}</p></main>);
+}

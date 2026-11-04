@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  role         String      @default("CUSTOMER")
+  createdAt    DateTime    @default(now())
+  orders       Order[]
+  testDrives   TestDrive[]
+  quotes       Quote[]
+}
+
+model Brand {
+  id     String         @id @default(cuid())
+  name   String         @unique
+  slug   String         @unique
+  models VehicleModel[]
+}
+
+model VehicleModel {
+  id        String       @id @default(cuid())
+  brandId   String
+  brand     Brand        @relation(fields: [brandId], references: [id])
+  name      String
+  slug      String       @unique
+  category  String
+  seats     Int
+  powertrain String
+  status    String       @default("PUBLISHED")
+  trims     VehicleTrim[]
+  createdAt DateTime     @default(now())
+
+  @@index([status, category])
+}
+
+model VehicleTrim {
+  id           String          @id @default(cuid())
+  modelId      String
+  model        VehicleModel    @relation(fields: [modelId], references: [id])
+  name         String
+  basePriceVnd BigInt
+  rangeKm      Int
+  batteryKwh   Decimal?        @db.Decimal(10, 2)
+  colors       ExteriorColor[]
+  options      TrimOption[]
+
+  @@unique([modelId, name])
+}
+
+model ExteriorColor {
+  id            String       @id @default(cuid())
+  trimId        String
+  trim          VehicleTrim  @relation(fields: [trimId], references: [id], onDelete: Cascade)
+  name          String
+  hex           String
+  surchargeVnd  BigInt       @default(0)
+}
+
+model TrimOption {
+  id       String      @id @default(cuid())
+  trimId   String
+  trim     VehicleTrim @relation(fields: [trimId], references: [id], onDelete: Cascade)
+  name     String
+  priceVnd BigInt
+}
+
+model Dealer {
+  id         String       @id @default(cuid())
+  name       String
+  province   String
+  city       String
+  address    String
+  phone      String
+  status     String       @default("ACTIVE")
+  testDrives TestDrive[]
+  orders     Order[]
+  slots      TestDriveSlot[]
+}
+
+model TestDriveSlot {
+  id        String       @id @default(cuid())
+  dealerId  String
+  dealer    Dealer       @relation(fields: [dealerId], references: [id])
+  date      DateTime
+  startTime String
+  capacity  Int
+  booked    Int          @default(0)
+  bookings  TestDrive[]
+
+  @@unique([dealerId, date, startTime])
+}
+
+model TestDrive {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  dealerId  String
+  dealer    Dealer         @relation(fields: [dealerId], references: [id])
+  slotId    String
+  slot      TestDriveSlot  @relation(fields: [slotId], references: [id])
+  modelSlug String
+  status    String         @default("CONFIRMED")
+  createdAt DateTime       @default(now())
+
+  @@unique([slotId, userId])
+}
+
+model Quote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  config    Json
+  snapshot  Json
+  totalVnd  BigInt
+  expiresAt DateTime
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+model Order {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  quoteId        String
+  quote          Quote    @relation(fields: [quoteId], references: [id])
+  dealerId       String
+  dealer         Dealer   @relation(fields: [dealerId], references: [id])
+  amountVnd      BigInt
+  depositVnd     BigInt
+  status         String   @default("PENDING_DEPOSIT")
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+  payments       Payment[]
+}
+
+model Payment {
+  id         String         @id @default(cuid())
+  orderId    String
+  order      Order          @relation(fields: [orderId], references: [id])
+  provider   String
+  amountVnd  BigInt
+  status     String         @default("CREATED")
+  providerRef String?       @unique
+  createdAt  DateTime       @default(now())
+  events     PaymentEvent[]
+}
+
+model PaymentEvent {
+  id             String   @id @default(cuid())
+  paymentId      String
+  payment        Payment  @relation(fields: [paymentId], references: [id])
+  providerEventId String  @unique
+  type           String
+  raw            Json
+  createdAt      DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model OnRoadFeeRule {
+  id            String    @id @default(cuid())
+  province      String
+  category      String    @default("ALL")
+  feeType       String
+  amountVnd     BigInt
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([province, category])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  resource   String
+  resourceId String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+}

@@ -1,0 +1,108 @@
+const API = process.env.API_URL ?? "http://127.0.0.1:4000/api/v1";
+
+let pass = 0;
+let fail = 0;
+function check(name, cond, detail = "") {
+  if (cond) {
+    pass++;
+    console.log(`PASS  ${name}`);
+  } else {
+    fail++;
+    console.log(`FAIL  ${name} ${detail}`);
+  }
+}
+
+async function call(path, { method = "GET", token, body } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { json = text; }
+  return { status: res.status, json };
+}
+
+const login = await call("/auth/login", { method: "POST", body: { email: "customer@autonova.local", password: "Customer123!" } });
+const token = login.json.token;
+check("login", [200, 201].includes(login.status) && !!token);
+
+const catalog = await call("/vehicles");
+const vehicle = catalog.json.data.find((v) => v.slug === "nova-v8");
+const trim = vehicle.trims[0];
+const color = trim.colors[0];
+const option = trim.options[0];
+
+// --- configuration validation ---
+const valid = await call("/configurations/validate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id] } });
+check("valid configuration accepted", [200, 201].includes(valid.status) && valid.json.valid === true, JSON.stringify(valid.json));
+
+const invalid = await call("/configurations/validate", { method: "POST", body: { trimId: trim.id, colorId: "not-a-color", optionIds: ["not-an-option"] } });
+check("invalid configuration rejected", [200, 201].includes(invalid.status) && invalid.json.valid === false, JSON.stringify(invalid.json));
+
+// --- on-road cost ---
+const onRoad = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id], province: "Ho Chi Minh" } });
+// 699,000,000 base + 0 color + 20,000,000 option + 10,000,000 + 500,000 + 1,000,000 = 730,500,000
+check("on-road total computed", [200, 201].includes(onRoad.status) && onRoad.json.breakdown.onRoadTotalVnd === "730500000", JSON.stringify(onRoad.json).slice(0, 300));
+check("on-road fees come from rules", onRoad.json?.fees?.ruleCount === 3, JSON.stringify(onRoad.json?.fees));
+
+const onRoadNoRules = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, province: "Da Nang" } });
+check("province without fee rules rejected", onRoadNoRules.status === 400, String(onRoadNoRules.status));
+
+// --- finance ---
+const finance = await call("/finance/simulate", { method: "POST", body: { principalVnd: "100000000", annualRateBps: 0, termMonths: 4, method: "EQUAL_PAYMENT" } });
+check("finance zero-interest monthly", [200, 201].includes(finance.status) && finance.json.monthlyPaymentVnd === "25000000", JSON.stringify(finance.json).slice(0, 200));
+check("finance zero-interest total", finance.json?.totalInterestVnd === "0", finance.json?.totalInterestVnd);
+
+const financeRate = await call("/finance/simulate", { method: "POST", body: { principalVnd: "100000000", annualRateBps: 1200, termMonths: 12, method: "EQUAL_PRINCIPAL" } });
+const sum = financeRate.json.schedule.reduce((acc, row) => acc + Number(row.principalVnd), 0);
+check("finance schedule principal sums to loan", [200, 201].includes(financeRate.status) && sum === 100000000, String(sum));
+check("finance last balance zero", financeRate.json?.schedule?.at(-1)?.balanceAfterVnd === "0", financeRate.json?.schedule?.at(-1)?.balanceAfterVnd);
+
+const financeBad = await call("/finance/simulate", { method: "POST", body: { principalVnd: "100000000", annualRateBps: 1200, termMonths: 0, method: "EQUAL_PAYMENT" } });
+check("finance invalid term rejected", financeBad.status === 400, String(financeBad.status));
+
+// --- test drive booking ---
+const slots = await call(`/test-drive-slots?dealerId=dealer-hcm`);
+check("slots listed", slots.status === 200 && slots.json.length >= 2, JSON.stringify(slots.json).slice(0, 200));
+const slot = slots.json.find((s) => s.id === "slot-hcm-1");
+
+const booking = await call("/test-drives", { method: "POST", token, body: { dealerId: "dealer-hcm", slotId: slot.id, modelSlug: "nova-v8" } });
+check("test drive booked", [200, 201].includes(booking.status) && booking.json.status === "CONFIRMED", JSON.stringify(booking.json).slice(0, 300));
+
+const duplicate = await call("/test-drives", { method: "POST", token, body: { dealerId: "dealer-hcm", slotId: slot.id, modelSlug: "nova-v8" } });
+check("same user cannot double-book slot", duplicate.status === 409, String(duplicate.status));
+
+const mine = await call("/me/test-drives", { token });
+check("my bookings listed", mine.status === 200 && mine.json.length === 1, JSON.stringify(mine.json).slice(0, 200));
+
+const cancelled = await call(`/test-drives/${booking.json.id}/cancel`, { method: "POST", token });
+check("booking cancelled", [200, 201].includes(cancelled.status) && cancelled.json.status === "CANCELLED", JSON.stringify(cancelled.json).slice(0, 200));
+
+const slotsAfter = await call(`/test-drive-slots?dealerId=dealer-hcm`);
+const slotAfter = slotsAfter.json.find((s) => s.id === "slot-hcm-1");
+check("capacity released after cancel", slotAfter.booked === 0, String(slotAfter.booked));
+
+// --- concurrency: 5 users race for a 1-seat slot ---
+const users = await Promise.all(
+  Array.from({ length: 5 }, (_, i) =>
+    call("/auth/register", { method: "POST", body: { email: `race-${Date.now()}-${i}@example.com`, password: "Password123!", name: `Race ${i}` } }),
+  ),
+);
+check("5 racing users registered", users.every((u) => [200, 201].includes(u.status)), JSON.stringify(users.map((u) => u.status)));
+
+const raceSlot = slots.json.find((s) => s.id === "slot-hcm-2");
+const results = await Promise.all(
+  users.map((u, i) =>
+    call("/test-drives", { method: "POST", token: u.json.token, body: { dealerId: "dealer-hcm", slotId: raceSlot.id, modelSlug: "nova-v8" } }),
+  ),
+);
+const succeeded = results.filter((r) => [200, 201].includes(r.status));
+const rejected = results.filter((r) => r.status === 409);
+check("exactly one racer wins the last seat", succeeded.length === 1, JSON.stringify(results.map((r) => r.status)));
+check("other racers rejected with 409", rejected.length === 4, JSON.stringify(results.map((r) => r.status)));
+
+const raceSlotAfter = (await call(`/test-drive-slots?dealerId=dealer-hcm`)).json.find((s) => s.id === "slot-hcm-2");
+check("slot booked count never exceeds capacity", raceSlotAfter.booked === 1 && raceSlotAfter.capacity === 1, JSON.stringify(raceSlotAfter));
+
+console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
+process.exit(fail === 0 ? 0 : 1);
