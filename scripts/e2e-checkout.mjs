@@ -34,11 +34,20 @@ const login = await call("/auth/login", { method: "POST", body: { email: "custom
 check("customer login", [200, 201].includes(login.status) && !!login.json.token, JSON.stringify(login.json));
 const token = login.json.token;
 
+// Drain any outbox backlog left by earlier runs so the notification assertions below
+// measure only this run's events.
+const bootstrapAdmin = await call("/auth/login", { method: "POST", body: { email: "admin@autonova.local", password: "Admin123!" } });
+await call("/admin/outbox/dispatch", { method: "POST", token: bootstrapAdmin.json.token });
+
 // 3. bad login rejected
 const badLogin = await call("/auth/login", { method: "POST", body: { email: "customer@autonova.local", password: "wrong-password" } });
 check("wrong password rejected", badLogin.status === 401, String(badLogin.status));
 
 // 4. catalog list
+const loginProbe = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'customer@autonova.local', password: 'Customer123!' }) });
+const rateLimitHeader = loginProbe.headers.get('x-ratelimit-limit');
+check('auth exposes a rate-limit policy', rateLimitHeader !== null && /^[0-9]+$/.test(rateLimitHeader), String(rateLimitHeader));
+
 const catalog = await call("/vehicles");
 check("catalog list returns data", catalog.status === 200 && Array.isArray(catalog.json.data) && catalog.json.data.length > 0, JSON.stringify(catalog.json).slice(0, 200));
 const vehicle = catalog.json.data.find((v) => v.slug === "nova-v8");
@@ -147,7 +156,10 @@ const dispatch = await call("/admin/outbox/dispatch", { method: "POST", token: a
 check("outbox dispatch processes events", [200, 201].includes(dispatch.status) && dispatch.json.processed >= 1, JSON.stringify(dispatch.json));
 
 const notificationsAfter = await call("/me/notifications", { token });
-check("notifications created from outbox", notificationsAfter.status === 200 && notificationsAfter.json.length > notificationsBefore.json.length, JSON.stringify(notificationsAfter.json).slice(0, 300));
+// The list is capped, so compare the newest entry's timestamp rather than the length.
+const beforeLatest = notificationsBefore.json[0]?.createdAt ?? "";
+const afterLatest = notificationsAfter.json[0]?.createdAt ?? "";
+check("notifications created from outbox", afterLatest > beforeLatest, `${beforeLatest} -> ${afterLatest}`);
 check("payment notification present", notificationsAfter.json.some((n) => n.type === "PAYMENT_SUCCEEDED"), JSON.stringify(notificationsAfter.json).slice(0, 200));
 check("order notification present", notificationsAfter.json.some((n) => n.type === "ORDER_CREATED"));
 
@@ -190,6 +202,26 @@ const audit = await call("/admin/audit-logs", { token: adminLogin.json.token });
 check("audit log records order creation", audit.status === 200 && audit.json.some((a) => a.action === "ORDER_CREATED" && a.resource === "Order"), JSON.stringify(audit.json).slice(0, 300));
 check("audit log records payment success", audit.json?.some((a) => a.action === "PAYMENT_SUCCEEDED" && a.resource === "Payment"));
 check("audit log records cancellation", audit.json?.some((a) => a.action === "ORDER_CANCELLED"));
+// 24. analytics and authorized export
+const analytics = await call("/admin/analytics", { token: adminLogin.json.token });
+const kpiOk = analytics.status === 200
+  && typeof analytics.json.orders.total === "number"
+  && typeof analytics.json.orders.conversionRate === "number";
+check("analytics dashboard returns KPIs", kpiOk, JSON.stringify(analytics.json).slice(0, 300));
+
+const rate = analytics.json?.orders?.conversionRate;
+check("analytics conversion rate is bounded", typeof rate === "number" && rate >= 0 && rate <= 100, String(rate));
+
+const csv = await fetch(`${API}/admin/reports/orders.csv`, { headers: { Authorization: `Bearer ${adminLogin.json.token}` } });
+const csvText = await csv.text();
+const csvOk = csv.status === 200 && csvText.indexOf("order_id,status,amount_vnd") === 0;
+check("csv export returns header and rows", csvOk, csvText.slice(0, 120));
+
+const csvForbidden = await fetch(`${API}/admin/reports/orders.csv`, { headers: { Authorization: `Bearer ${token}` } });
+check("csv export forbidden for customer", csvForbidden.status === 403, String(csvForbidden.status));
+
+const csvBadFilter = await call("/admin/reports/orders.csv?status=bad;drop", { token: adminLogin.json.token });
+check("csv export rejects invalid filter", csvBadFilter.status === 400, String(csvBadFilter.status));
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

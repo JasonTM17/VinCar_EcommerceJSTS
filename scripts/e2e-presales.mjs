@@ -141,5 +141,12 @@ check("other racers rejected with 409", rejected.length === 4, JSON.stringify(re
 const raceSlotAfter = (await call(`/test-drive-slots?dealerId=dealer-hcm`)).json.find((s) => s.id === slotB.json.id);
 check("slot booked count never exceeds capacity", raceSlotAfter.booked === 1 && raceSlotAfter.capacity === 1, JSON.stringify(raceSlotAfter));
 
+// Drain the outbox so events raised by this run do not leak into later runs.
+const finalDispatch = await call("/admin/outbox/dispatch", { method: "POST", token: adminToken });
+check("dispatch drains remaining events", [200, 201].includes(finalDispatch.status), JSON.stringify(finalDispatch.json));
+
+const bookingNotifications = await call("/me/notifications", { token });
+check("booking notification delivered", bookingNotifications.json.some((n) => n.type === "TEST_DRIVE_BOOKED"), JSON.stringify(bookingNotifications.json).slice(0, 200));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

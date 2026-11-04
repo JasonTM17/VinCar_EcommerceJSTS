@@ -10,14 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@autonova/pricing": "workspace:*",
     "@autonova/outbox": "workspace:*",
+    "@autonova/pricing": "workspace:*",
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.28",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/swagger": "^11.2.6",
+    "@nestjs/throttler": "6.7.1",
     "@prisma/client": "^6.19.0",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
