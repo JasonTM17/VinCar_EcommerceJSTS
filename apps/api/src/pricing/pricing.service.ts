@@ -1,13 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { calculateQuote, type QuoteBreakdown } from '@autonova/pricing';
 import { PrismaService } from '../prisma/prisma.service';
+import { PromotionsService } from '../promotions/promotions.service';
 
 export interface ResolvedConfiguration {
   trim: {
     id: string;
     name: string;
     basePriceVnd: bigint;
-    model: { name: string; category: string };
+    model: { id: string; name: string; category: string };
   };
   color: { id: string; name: string; surchargeVnd: bigint } | null;
   options: { id: string; name: string; priceVnd: bigint }[];
@@ -15,7 +16,7 @@ export interface ResolvedConfiguration {
 
 @Injectable()
 export class PricingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly promotions: PromotionsService) {}
 
   /** Loads a trim with its colors/options/model and rejects unknown selections. */
   async resolve(trimId: string, colorId?: string, optionIds: string[] = []): Promise<{ config: ResolvedConfiguration; errors: string[] }> {
@@ -37,7 +38,7 @@ export class PricingService {
     return {
       errors,
       config: {
-        trim: { id: trim.id, name: trim.name, basePriceVnd: trim.basePriceVnd, model: { name: trim.model.name, category: trim.model.category } },
+        trim: { id: trim.id, name: trim.name, basePriceVnd: trim.basePriceVnd, model: { id: trim.model.id, name: trim.model.name, category: trim.model.category } },
         color: color ? { id: color.id, name: color.name, surchargeVnd: color.surchargeVnd } : null,
         options: options.map((o) => ({ id: o.id, name: o.name, priceVnd: o.priceVnd })),
       },
@@ -45,7 +46,7 @@ export class PricingService {
   }
 
   /** Fee rules come from OnRoadFeeRule rows with an effective-dated window, never from code. */
-  async onRoad(input: { trimId: string; colorId?: string; optionIds?: string[]; province: string }) {
+  async onRoad(input: { trimId: string; colorId?: string; optionIds?: string[]; province: string; promotionCode?: string }) {
     const { config, errors } = await this.resolve(input.trimId, input.colorId, input.optionIds ?? []);
     if (errors.length > 0 || !config) throw new BadRequestException(errors.join('; '));
 
@@ -68,11 +69,19 @@ export class PricingService {
     }, {});
 
     const optionsTotal = config.options.reduce((sum, option) => sum + option.priceVnd, 0n);
+    const vehicleBeforeDiscount = config.trim.basePriceVnd + (config.color?.surchargeVnd ?? 0n) + optionsTotal;
+    const promotionSet = await this.promotions.resolveDiscounts({
+      modelId: config.trim.model.id,
+      trimId: config.trim.id,
+      vehiclePriceVnd: vehicleBeforeDiscount,
+      code: input.promotionCode,
+    });
+
     const breakdown = calculateQuote({
       basePrice: config.trim.basePriceVnd,
       colorSurcharge: config.color?.surchargeVnd ?? 0n,
       optionsTotal,
-      discount: 0n,
+      discount: promotionSet.discountVnd,
       registrationFee: fees.REGISTRATION ?? 0n,
       plateFee: fees.PLATE ?? 0n,
       otherFees: fees.OTHER ?? 0n,
@@ -87,6 +96,7 @@ export class PricingService {
         colorName: config.color?.name ?? null,
         optionIds: config.options.map((o) => o.id),
       },
+      promotions: promotionSet.promotions,
       fees: {
         registrationFeeVnd: (fees.REGISTRATION ?? 0n).toString(),
         plateFeeVnd: (fees.PLATE ?? 0n).toString(),

@@ -40,13 +40,33 @@ const invalid = await call("/configurations/validate", { method: "POST", body: {
 check("invalid configuration rejected", [200, 201].includes(invalid.status) && invalid.json.valid === false, JSON.stringify(invalid.json));
 
 // --- on-road cost ---
+// 699,000,000 base + 0 color + 20,000,000 option = 719,000,000 vehicle price.
+// NOVA5 auto-applies 5% (35,950,000), then fees 10,000,000 + 500,000 + 1,000,000
+// => 719,000,000 - 35,950,000 + 11,500,000 = 694,550,000.
 const onRoad = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id], province: "Ho Chi Minh" } });
-// 699,000,000 base + 0 color + 20,000,000 option + 10,000,000 + 500,000 + 1,000,000 = 730,500,000
-check("on-road total computed", [200, 201].includes(onRoad.status) && onRoad.json.breakdown.onRoadTotalVnd === "730500000", JSON.stringify(onRoad.json).slice(0, 300));
+check("on-road total computed", [200, 201].includes(onRoad.status) && onRoad.json.breakdown.onRoadTotalVnd === "694550000", JSON.stringify(onRoad.json).slice(0, 300));
 check("on-road fees come from rules", onRoad.json?.fees?.ruleCount === 3, JSON.stringify(onRoad.json?.fees));
 
 const onRoadNoRules = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, province: "Da Nang" } });
 check("province without fee rules rejected", onRoadNoRules.status === 400, String(onRoadNoRules.status));
+
+// --- promotions (rules enforced server-side) ---
+const promoAuto = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id], province: "Ho Chi Minh" } });
+check("best eligible promotion auto-applied", [200, 201].includes(promoAuto.status) && promoAuto.json.promotions?.some((p) => p.code === "NOVA5"), JSON.stringify(promoAuto.json.promotions));
+check("promotion discount computed server-side", promoAuto.json?.promotions?.[0]?.discountVnd === "35950000", JSON.stringify(promoAuto.json?.promotions));
+
+const promoExplicit = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id], province: "Ho Chi Minh", promotionCode: "NOVA5" } });
+check("explicit promotion applied", [200, 201].includes(promoExplicit.status) && promoExplicit.json.promotions?.length === 1, JSON.stringify(promoExplicit.json.promotions));
+check("promotion reduces on-road total", promoExplicit.json?.breakdown?.onRoadTotalVnd === "694550000", promoExplicit.json?.breakdown?.onRoadTotalVnd);
+
+const promoExpired = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id], province: "Ho Chi Minh", promotionCode: "EXPIRED10" } });
+check("expired promotion rejected", promoExpired.status === 400, String(promoExpired.status));
+
+const promoExcluded = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id], province: "Ho Chi Minh", promotionCode: "ECOEXTRA" } });
+check("excluded trim promotion rejected", promoExcluded.status === 400, String(promoExcluded.status));
+
+const promoUnknown = await call("/on-road/simulate", { method: "POST", body: { trimId: trim.id, colorId: color.id, optionIds: [option.id], province: "Ho Chi Minh", promotionCode: "NOPE" } });
+check("unknown promotion rejected", promoUnknown.status === 400, String(promoUnknown.status));
 
 // --- finance ---
 const finance = await call("/finance/simulate", { method: "POST", body: { principalVnd: "100000000", annualRateBps: 0, termMonths: 4, method: "EQUAL_PAYMENT" } });

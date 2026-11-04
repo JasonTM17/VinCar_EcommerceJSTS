@@ -37,7 +37,7 @@ export class PricingController {
   }
 
   @Post('on-road/simulate')
-  onRoad(@Body() dto: ConfigurationDto & { province: string }) {
+  onRoad(@Body() dto: ConfigurationDto & { province: string; promotionCode?: string }) {
     return this.pricing.onRoad(dto);
   }
 }

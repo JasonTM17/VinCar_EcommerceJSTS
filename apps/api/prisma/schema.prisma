@@ -38,6 +38,7 @@ model VehicleModel {
   status    String       @default("PUBLISHED")
   trims     VehicleTrim[]
   createdAt DateTime     @default(now())
+  promotions PromotionModel[]
 
   @@index([status, category])
 }
@@ -52,6 +53,7 @@ model VehicleTrim {
   batteryKwh   Decimal?        @db.Decimal(10, 2)
   colors       ExteriorColor[]
   options      TrimOption[]
+  excludedFrom PromotionExcludedTrim[]
 
   @@unique([modelId, name])
 }
@@ -207,4 +209,42 @@ model AuditLog {
   resourceId String?
   meta       Json?
   createdAt  DateTime @default(now())
+}
+
+/// A promotion is eligible for a set of vehicle models and may exclude specific
+/// trims. Discounts are computed server-side and never trusted from the client.
+model Promotion {
+  id                 String                     @id @default(cuid())
+  code               String                     @unique
+  name               String
+  description        String?
+  discountType       String                     // PERCENTAGE | FIXED
+  discountValue      BigInt                     // basis points when PERCENTAGE, VND when FIXED
+  maxDiscountVnd     BigInt?
+  minVehiclePriceVnd BigInt                     @default(0)
+  startsAt           DateTime
+  endsAt             DateTime
+  status             String                     @default("ACTIVE") // ACTIVE | DISABLED
+  stacking           String                     @default("EXCLUSIVE") // EXCLUSIVE | STACKABLE
+  createdAt          DateTime                   @default(now())
+  models             PromotionModel[]
+  excludedTrims      PromotionExcludedTrim[]
+}
+
+model PromotionModel {
+  promotionId String
+  modelId     String
+  promotion   Promotion    @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  model       VehicleModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, modelId])
+}
+
+model PromotionExcludedTrim {
+  promotionId String
+  trimId      String
+  promotion   Promotion   @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  trim        VehicleTrim @relation(fields: [trimId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, trimId])
 }

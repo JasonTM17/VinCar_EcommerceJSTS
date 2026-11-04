@@ -52,7 +52,7 @@ check("category filter works", filtered.status === 200 && filtered.json.data.eve
 
 // 6. quote
 const quote = await call("/quotes", { method: "POST", token, body: { trimId: trim.id, province: "Ho Chi Minh" } });
-check("quote created", [200, 201].includes(quote.status) && quote.json.totalVnd === "710500000", JSON.stringify(quote.json).slice(0, 300));
+check("quote created", [200, 201].includes(quote.status) && quote.json.totalVnd === "675550000", JSON.stringify(quote.json).slice(0, 300));
 const quoteId = quote.json.id;
 
 // 7. quote requires auth
@@ -71,7 +71,7 @@ check("order created", [200, 201].includes(order1.status) && order1.json.status 
 const order2 = await call("/orders", { method: "POST", token, body: { quoteId, dealerId: dealer.id, idempotencyKey: idem } });
 check("duplicate idempotency key returns same order", [200, 201].includes(order2.status) && order2.json.id === order1.json.id, JSON.stringify(order2.json).slice(0, 200));
 const order = order1.json;
-check("deposit is 10%", order.depositVnd === "71050000", order.depositVnd);
+check("deposit is 10%", order.depositVnd === "67555000", order.depositVnd);
 
 // 10. webhook with bad signature rejected
 const evtBad = { id: `evt-${Date.now()}`, type: "payment.succeeded", paymentId: order.payments[0].id, amountVnd: order.depositVnd };
