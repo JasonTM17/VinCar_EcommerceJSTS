@@ -2,12 +2,17 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { InventoryService } from '../inventory/inventory.service';
 
 const ADMIN_ROLES = ['ADMIN', 'DEALER_MANAGER'];
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly inventory: InventoryService,
+  ) {}
 
   async profile(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -43,6 +48,14 @@ export class OrdersService {
         include: { payments: true },
       });
       await this.notifications.publish(tx, 'ORDER_CREATED', { userId, orderId: order.id });
+
+      // Reserve physical stock in the same transaction as the order, so a hold can
+      // never exist without an order or an order without a hold decision.
+      const config = quote.config as { trimId?: string } | null;
+      if (config?.trimId) {
+        const trim = await tx.vehicleTrim.findUnique({ where: { id: config.trimId } });
+        if (trim) await this.inventory.reserveForOrder(tx, order.id, dealer.id, trim.modelId);
+      }
       return order;
     });
   }

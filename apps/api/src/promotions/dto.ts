@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreatePromotionDto {
@@ -36,10 +36,10 @@ export class CreatePromotionDto {
   stacking!: 'EXCLUSIVE' | 'STACKABLE';
 
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsString({ each: true })
   modelIds!: string[];
 
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsString({ each: true })
   excludedTrimIds!: string[];
 }

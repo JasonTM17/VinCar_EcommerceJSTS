@@ -13,6 +13,7 @@ import { FinanceModule } from './finance/finance.module';
 import { PricingModule } from './pricing/pricing.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { InventoryModule } from './inventory/inventory.module';
 import { TestDrivesModule } from './test-drives/test-drives.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { TestDrivesModule } from './test-drives/test-drives.module';
     PricingModule,
     PromotionsModule,
     NotificationsModule,
+    InventoryModule,
     FinanceModule,
     QuotesModule,
     OrdersModule,

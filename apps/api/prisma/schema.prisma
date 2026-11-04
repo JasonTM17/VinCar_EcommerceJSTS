@@ -39,6 +39,7 @@ model VehicleModel {
   trims     VehicleTrim[]
   createdAt DateTime     @default(now())
   promotions PromotionModel[]
+  units      VehicleUnit[]
 
   @@index([status, category])
 }
@@ -54,6 +55,7 @@ model VehicleTrim {
   colors       ExteriorColor[]
   options      TrimOption[]
   excludedFrom PromotionExcludedTrim[]
+  units        VehicleUnit[]
 
   @@unique([modelId, name])
 }
@@ -86,6 +88,7 @@ model Dealer {
   testDrives TestDrive[]
   orders     Order[]
   slots      TestDriveSlot[]
+  units      VehicleUnit[]
 }
 
 model TestDriveSlot {
@@ -144,6 +147,37 @@ model Order {
   createdAt      DateTime @default(now())
   payments       Payment[]
   refunds        Refund[]
+  reservation    InventoryReservation?
+}
+
+/// A physical car at a dealer. VIN is optional until a unit is actually allocated.
+model VehicleUnit {
+  id            String          @id @default(cuid())
+  dealerId      String
+  dealer        Dealer          @relation(fields: [dealerId], references: [id])
+  modelId       String
+  model         VehicleModel    @relation(fields: [modelId], references: [id])
+  trimId        String?
+  trim          VehicleTrim?    @relation(fields: [trimId], references: [id])
+  vin           String?         @unique
+  status        String          @default("IN_STOCK") // IN_STOCK | IN_TRANSIT | PREORDER | RESERVED | ALLOCATED | SOLD
+  createdAt     DateTime        @default(now())
+  reservations  InventoryReservation[]
+
+  @@index([dealerId, modelId, status])
+}
+
+model InventoryReservation {
+  id            String       @id @default(cuid())
+  orderId       String       @unique
+  order         Order        @relation(fields: [orderId], references: [id])
+  vehicleUnitId String?
+  vehicleUnit   VehicleUnit? @relation(fields: [vehicleUnitId], references: [id])
+  status        String       @default("HELD") // HELD | RELEASED | CONVERTED
+  expiresAt     DateTime
+  createdAt     DateTime     @default(now())
+
+  @@index([status, expiresAt])
 }
 
 model Refund {

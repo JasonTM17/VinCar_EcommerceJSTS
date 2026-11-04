@@ -157,5 +157,33 @@ check("notification marked read", [200, 201].includes(readOne.status) && readOne
 const dispatchAgain = await call("/admin/outbox/dispatch", { method: "POST", token: adminLogin.json.token });
 check("outbox dispatch is idempotent", dispatchAgain.json.processed === 0, JSON.stringify(dispatchAgain.json));
 
+// 22. inventory: reservation on order, allocation to a paid order, expiry safety
+const unit = await call("/admin/inventory/vehicle-units", { method: "POST", token: adminLogin.json.token, body: { dealerId: dealer.id, modelId: vehicle.id, trimId: trim.id, status: "IN_STOCK" } });
+check("admin created vehicle unit", [200, 201].includes(unit.status) && !!unit.json.id, JSON.stringify(unit.json));
+
+const resIdem = `e2e-res-${Date.now()}`;
+const order4 = await call("/orders", { method: "POST", token, body: { quoteId, dealerId: dealer.id, idempotencyKey: resIdem } });
+const reservations = await call("/admin/inventory/reservations", { token: adminLogin.json.token });
+check("order created a held reservation", reservations.json.some((r) => r.orderId === order4.json.id && r.status === "HELD"), JSON.stringify(reservations.json).slice(0, 300));
+
+const allocateUnpaid = await call(`/admin/orders/${order4.json.id}/allocate`, { method: "POST", token: adminLogin.json.token, body: { vehicleUnitId: unit.json.id } });
+check("cannot allocate stock to an unpaid order", allocateUnpaid.status === 400, String(allocateUnpaid.status));
+
+const evt3 = { id: `evt-${Date.now()}-alloc`, type: "payment.succeeded", paymentId: order4.json.payments[0].id, amountVnd: order4.json.depositVnd };
+const raw3 = JSON.stringify(evt3);
+const sig3 = createHmac("sha256", SECRET).update(raw3).digest("hex");
+await fetch(`${API}/webhooks/payments/mock`, { method: "POST", headers: { "Content-Type": "application/json", "x-signature": sig3 }, body: raw3 });
+
+const allocated = await call(`/admin/orders/${order4.json.id}/allocate`, { method: "POST", token: adminLogin.json.token, body: { vehicleUnitId: unit.json.id } });
+check("unit allocated to a paid order", [200, 201].includes(allocated.status) && allocated.json.status === "ALLOCATED", JSON.stringify(allocated.json).slice(0, 300));
+check("reservation converted to the allocated unit", allocated.json?.reservation?.status === "CONVERTED", JSON.stringify(allocated.json?.reservation));
+
+const unitsAfter = await call("/admin/inventory", { token: adminLogin.json.token });
+const allocatedUnit = unitsAfter.json.find((u) => u.id === unit.json.id);
+check("unit status is ALLOCATED", allocatedUnit?.status === "ALLOCATED", JSON.stringify(allocatedUnit));
+
+const release = await call("/admin/inventory/release-expired", { method: "POST", token: adminLogin.json.token });
+check("release-expired is safe when nothing expired", [200, 201].includes(release.status) && release.json.released === 0, JSON.stringify(release.json));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
