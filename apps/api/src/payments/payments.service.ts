@@ -2,10 +2,11 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService, private readonly audit: AuditService) {}
   sign(body: string) { return createHmac('sha256', process.env.PAYMENT_WEBHOOK_SECRET ?? 'mock-secret').update(body).digest('hex'); }
   verify(body: string, signature: string) {
     const expected = this.sign(body);
@@ -29,6 +30,13 @@ export class PaymentsService {
       await tx.paymentEvent.create({ data: { paymentId: payment.id, providerEventId: evt.id, type: evt.type, raw: evt } });
       if (evt.type === 'payment.succeeded') {
         await this.notifications.publish(tx, 'PAYMENT_SUCCEEDED', { userId: payment.order.userId, orderId: payment.orderId, amountVnd: evt.amountVnd });
+        await this.audit.record(tx, {
+          actorId: payment.order.userId,
+          action: 'PAYMENT_SUCCEEDED',
+          resource: 'Payment',
+          resourceId: payment.id,
+          meta: { providerEventId: evt.id, amountVnd: evt.amountVnd, orderId: payment.orderId },
+        });
       }
       return { ok: true };
     });

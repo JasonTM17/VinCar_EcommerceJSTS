@@ -2,10 +2,15 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class TestDriveService {
-  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
+  ) {}
 
   async listSlots(dealerId: string, date?: string) {
     const day = date ? new Date(`${date}T00:00:00.000Z`) : undefined;
@@ -52,6 +57,7 @@ export class TestDriveService {
           include: { slot: true, dealer: true },
         });
         await this.notifications.publish(tx, 'TEST_DRIVE_BOOKED', { userId, bookingId: reactivated.id });
+        await this.audit.record(tx, { actorId: userId, action: 'TEST_DRIVE_BOOKED', resource: 'TestDrive', resourceId: reactivated.id });
         return reactivated;
       }
 
@@ -61,6 +67,7 @@ export class TestDriveService {
           include: { slot: true, dealer: true },
         });
         await this.notifications.publish(tx, 'TEST_DRIVE_BOOKED', { userId, bookingId: booking.id });
+        await this.audit.record(tx, { actorId: userId, action: 'TEST_DRIVE_BOOKED', resource: 'TestDrive', resourceId: booking.id });
         return booking;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

@@ -2,7 +2,8 @@ import { PaymentsService } from './payments.service';
 
 describe('PaymentsService', () => {
   const notifications = { publish: jest.fn() } as never;
-  const svc = new PaymentsService({} as never, notifications);
+  const audit = { record: jest.fn() } as never;
+  const svc = new PaymentsService({} as never, notifications, audit);
 
   it('sign + verify roundtrip', () => {
     const body = '{"id":"e1"}';

@@ -14,6 +14,7 @@ import { PricingModule } from './pricing/pricing.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { AuditModule } from './audit/audit.module';
 import { TestDrivesModule } from './test-drives/test-drives.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { TestDrivesModule } from './test-drives/test-drives.module';
     PromotionsModule,
     NotificationsModule,
     InventoryModule,
+    AuditModule,
     FinanceModule,
     QuotesModule,
     OrdersModule,

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { AuditService } from '../audit/audit.service';
 
 const ADMIN_ROLES = ['ADMIN', 'DEALER_MANAGER'];
 
@@ -12,6 +13,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly inventory: InventoryService,
+    private readonly audit: AuditService,
   ) {}
 
   async profile(userId: string) {
@@ -48,6 +50,7 @@ export class OrdersService {
         include: { payments: true },
       });
       await this.notifications.publish(tx, 'ORDER_CREATED', { userId, orderId: order.id });
+      await this.audit.record(tx, { actorId: userId, action: 'ORDER_CREATED', resource: 'Order', resourceId: order.id });
 
       // Reserve physical stock in the same transaction as the order, so a hold can
       // never exist without an order or an order without a hold decision.
@@ -99,6 +102,13 @@ export class OrdersService {
         include: { payments: true, refunds: true },
       });
       await this.notifications.publish(tx, 'ORDER_CANCELLED', { userId, orderId: order.id, refundVnd: refundVnd.toString() });
+      await this.audit.record(tx, {
+        actorId: userId,
+        action: 'ORDER_CANCELLED',
+        resource: 'Order',
+        resourceId: order.id,
+        meta: { reason: reason ?? null, refundVnd: refundVnd.toString(), byAdmin: ADMIN_ROLES.includes(role) },
+      });
       return cancelled;
     });
   }

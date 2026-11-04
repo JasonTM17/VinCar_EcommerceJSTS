@@ -185,5 +185,11 @@ check("unit status is ALLOCATED", allocatedUnit?.status === "ALLOCATED", JSON.st
 const release = await call("/admin/inventory/release-expired", { method: "POST", token: adminLogin.json.token });
 check("release-expired is safe when nothing expired", [200, 201].includes(release.status) && release.json.released === 0, JSON.stringify(release.json));
 
+// 23. audit trail for the changes made above
+const audit = await call("/admin/audit-logs", { token: adminLogin.json.token });
+check("audit log records order creation", audit.status === 200 && audit.json.some((a) => a.action === "ORDER_CREATED" && a.resource === "Order"), JSON.stringify(audit.json).slice(0, 300));
+check("audit log records payment success", audit.json?.some((a) => a.action === "PAYMENT_SUCCEEDED" && a.resource === "Payment"));
+check("audit log records cancellation", audit.json?.some((a) => a.action === "ORDER_CANCELLED"));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
