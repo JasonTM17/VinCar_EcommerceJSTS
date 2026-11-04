@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
   sign(body: string) { return createHmac('sha256', process.env.PAYMENT_WEBHOOK_SECRET ?? 'mock-secret').update(body).digest('hex'); }
   verify(body: string, signature: string) {
     const expected = this.sign(body);
@@ -26,6 +27,9 @@ export class PaymentsService {
         await tx.order.update({ where: { id: payment.orderId }, data: { status: 'DEPOSIT_PAID' } });
       }
       await tx.paymentEvent.create({ data: { paymentId: payment.id, providerEventId: evt.id, type: evt.type, raw: evt } });
+      if (evt.type === 'payment.succeeded') {
+        await this.notifications.publish(tx, 'PAYMENT_SUCCEEDED', { userId: payment.order.userId, orderId: payment.orderId, amountVnd: evt.amountVnd });
+      }
       return { ok: true };
     });
   }

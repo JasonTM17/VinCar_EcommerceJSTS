@@ -1,12 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const ADMIN_ROLES = ['ADMIN', 'DEALER_MANAGER'];
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
 
   async profile(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -28,7 +29,7 @@ export class OrdersService {
       const dealer = await tx.dealer.findUnique({ where: { id: input.dealerId } });
       if (!dealer || dealer.status !== 'ACTIVE') throw new BadRequestException('Dealer unavailable');
       const depositVnd = (quote.totalVnd * 10n) / 100n; // 10% demo deposit
-      return tx.order.create({
+      const order = await tx.order.create({
         data: {
           userId,
           quoteId: quote.id,
@@ -41,6 +42,8 @@ export class OrdersService {
         },
         include: { payments: true },
       });
+      await this.notifications.publish(tx, 'ORDER_CREATED', { userId, orderId: order.id });
+      return order;
     });
   }
 
@@ -65,21 +68,25 @@ export class OrdersService {
       if (order.status === 'DELIVERED') throw new BadRequestException('Delivered orders cannot be cancelled');
 
       const paid = order.payments.find((payment) => payment.status === 'SUCCEEDED');
+      let refundVnd = 0n;
       if (paid) {
         const existing = await tx.refund.findFirst({ where: { orderId: order.id } });
         if (!existing) {
-          await tx.refund.create({
+          const refund = await tx.refund.create({
             data: { orderId: order.id, amountVnd: paid.amountVnd, reason: reason ?? 'Customer cancellation', status: 'REQUESTED' },
           });
+          refundVnd = refund.amountVnd;
         }
         await tx.payment.update({ where: { id: paid.id }, data: { status: 'REFUND_PENDING' } });
       }
 
-      return tx.order.update({
+      const cancelled = await tx.order.update({
         where: { id: order.id },
         data: { status: 'CANCELLED' },
         include: { payments: true, refunds: true },
       });
+      await this.notifications.publish(tx, 'ORDER_CANCELLED', { userId, orderId: order.id, refundVnd: refundVnd.toString() });
+      return cancelled;
     });
   }
 }

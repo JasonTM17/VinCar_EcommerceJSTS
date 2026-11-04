@@ -141,5 +141,21 @@ const other = await call("/auth/register", { method: "POST", body: { email: `oth
 const forbiddenCancel = await call(`/orders/${order3.json.id}/cancel`, { method: "POST", token: other.json.token, body: {} });
 check("cross-user cancel forbidden", forbiddenCancel.status === 403, String(forbiddenCancel.status));
 
+// 21. transactional outbox -> notifications
+const notificationsBefore = await call("/me/notifications", { token });
+const dispatch = await call("/admin/outbox/dispatch", { method: "POST", token: adminLogin.json.token });
+check("outbox dispatch processes events", [200, 201].includes(dispatch.status) && dispatch.json.processed >= 1, JSON.stringify(dispatch.json));
+
+const notificationsAfter = await call("/me/notifications", { token });
+check("notifications created from outbox", notificationsAfter.status === 200 && notificationsAfter.json.length > notificationsBefore.json.length, JSON.stringify(notificationsAfter.json).slice(0, 300));
+check("payment notification present", notificationsAfter.json.some((n) => n.type === "PAYMENT_SUCCEEDED"), JSON.stringify(notificationsAfter.json).slice(0, 200));
+check("order notification present", notificationsAfter.json.some((n) => n.type === "ORDER_CREATED"));
+
+const readOne = await call(`/me/notifications/${notificationsAfter.json[0].id}/read`, { method: "POST", token });
+check("notification marked read", [200, 201].includes(readOne.status) && readOne.json.read === true, JSON.stringify(readOne.json));
+
+const dispatchAgain = await call("/admin/outbox/dispatch", { method: "POST", token: adminLogin.json.token });
+check("outbox dispatch is idempotent", dispatchAgain.json.processed === 0, JSON.stringify(dispatchAgain.json));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

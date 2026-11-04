@@ -188,6 +188,21 @@ model Notification {
   createdAt DateTime @default(now())
 }
 
+/// Transactional outbox: business transactions write an event in the same DB
+/// transaction as the state change, so a notification can never be lost or
+/// duplicated relative to the action that produced it.
+model OutboxEvent {
+  id          String    @id @default(cuid())
+  type        String
+  payload     Json
+  status      String    @default("PENDING") // PENDING | PROCESSED | FAILED
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+}
+
 model OnRoadFeeRule {
   id            String    @id @default(cuid())
   province      String

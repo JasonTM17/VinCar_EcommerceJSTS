@@ -1,10 +1,11 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TestDriveService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
 
   async listSlots(dealerId: string, date?: string) {
     const day = date ? new Date(`${date}T00:00:00.000Z`) : undefined;
@@ -45,18 +46,22 @@ export class TestDriveService {
       // A previously cancelled booking keeps its row so (slotId, userId) stays unique;
       // reactivate it instead of inserting a duplicate.
       if (existing) {
-        return tx.testDrive.update({
+        const reactivated = await tx.testDrive.update({
           where: { id: existing.id },
           data: { status: 'CONFIRMED' },
           include: { slot: true, dealer: true },
         });
+        await this.notifications.publish(tx, 'TEST_DRIVE_BOOKED', { userId, bookingId: reactivated.id });
+        return reactivated;
       }
 
       try {
-        return await tx.testDrive.create({
+        const booking = await tx.testDrive.create({
           data: { userId, dealerId: input.dealerId, slotId: input.slotId, modelSlug: input.modelSlug },
           include: { slot: true, dealer: true },
         });
+        await this.notifications.publish(tx, 'TEST_DRIVE_BOOKED', { userId, bookingId: booking.id });
+        return booking;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           throw new ConflictException('You already have a booking for this slot');
