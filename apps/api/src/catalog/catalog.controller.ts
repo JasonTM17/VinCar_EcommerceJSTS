@@ -23,5 +23,5 @@ export class CatalogController {
   }
 }
 export function serializeVehicle(v: any) {
-  return { ...v, trims: v.trims.map((t: any) => ({ ...t, basePriceVnd: t.basePriceVnd.toString(), batteryKwh: t.batteryKwh?.toString() ?? null, colors: t.colors.map((c: any) => ({ ...c, surchargeVnd: c.surchargeVnd.toString() })), options: t.options.map((o: any) => ({ ...o, priceVnd: o.priceVnd.toString() })) })) };
+  return { ...v, brandId: v.brandId, trims: v.trims.map((t: any) => ({ ...t, basePriceVnd: t.basePriceVnd.toString(), batteryKwh: t.batteryKwh?.toString() ?? null, colors: t.colors.map((c: any) => ({ ...c, surchargeVnd: c.surchargeVnd.toString() })), options: t.options.map((o: any) => ({ ...o, priceVnd: o.priceVnd.toString() })) })) };
 }

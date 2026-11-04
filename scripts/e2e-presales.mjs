@@ -93,6 +93,12 @@ check("admin created slot", [200, 201].includes(slotA.status) && !!slotA.json.id
 const slotB = await call("/admin/test-drive-slots", { method: "POST", token: adminToken, body: { dealerId: "dealer-hcm", date: slotDate, startTime: "14:00", capacity: 1 } });
 check("admin created race slot", [200, 201].includes(slotB.status) && !!slotB.json.id, JSON.stringify(slotB.json));
 
+// catalog management
+const newModel = await call("/admin/catalog/vehicle-models", { method: "POST", token: adminToken, body: { brandId: vehicle.brandId, name: "Nova Test", slug: `nova-test-${Date.now()}`, category: "SUV", seats: 5, powertrain: "Electric" } });
+check("admin created vehicle model", [200, 201].includes(newModel.status) && !!newModel.json.id, JSON.stringify(newModel.json));
+const newTrim = await call(`/admin/catalog/vehicle-models/${newModel.json.id}/trims`, { method: "POST", token: adminToken, body: { name: "Base", basePriceVnd: "500000000", rangeKm: 400 } });
+check("admin created trim", [200, 201].includes(newTrim.status) && !!newTrim.json.id, JSON.stringify(newTrim.json));
+
 const slots = await call(`/test-drive-slots?dealerId=dealer-hcm`);
 check("slots listed", slots.status === 200 && slots.json.length >= 2, JSON.stringify(slots.json).slice(0, 200));
 const slot = slotA.json;

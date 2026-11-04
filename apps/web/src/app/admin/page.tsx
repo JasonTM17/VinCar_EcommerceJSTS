@@ -78,6 +78,7 @@ export default function Admin() {
           <h1 className="text-3xl font-bold">Bảng điều hành quản trị</h1>
           <p className="mt-1 text-sm text-neutral-500">Vai trò: {role}</p>
         </div>
+        <a href="/admin/catalog" className="text-sm text-cyan-700">Quản lý danh mục</a>
         <a href="/" className="text-sm text-cyan-700">Về trang chủ</a>
       </div>
 
