@@ -7,9 +7,10 @@ AutoNova is an O2O online car commerce platform: research → configure → esti
 - Customer (storefront), Dealer staff / Sales, Admin.
 
 ## Scope
-- MVP: catalog, auth/RBAC, configurator, pricing/on-road/finance, dealers, test drives, quotes, orders, mock deposit payment + signed webhook, inventory reservation, admin basics, notifications (outbox log).
+- MVP: catalog, auth/RBAC, configurator, pricing/on-road/finance, dealers, test drives, quotes, orders, mock deposit payment + signed webhook, inventory reservation, admin basics, notifications (outbox log), and one-shot catalog-grounded vehicle recommendations.
 - Advanced (after MVP): complex promotions, real payment provider, CRM analytics, caching.
-- Out of scope: AI advisor, chatbot, trade-in, digital contracts, mobile app.
+- The recommender sends one natural-language need to LongCat to extract bounded constraints; the API validates them and filters/ranks only published vehicle models and their trims from PostgreSQL. Returned facts and reason codes come from database comparisons. The feature stores no conversation history and does not imply live stock.
+- Out of scope: conversational AI advisor/chatbot, market or price forecasting, trade-in, digital contracts, mobile app.
 
 ## Key rules
 - Backend is source of truth for price, stock, order status. Frontend never decides payment amounts.

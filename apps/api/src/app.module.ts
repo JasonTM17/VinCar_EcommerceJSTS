@@ -5,6 +5,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { HealthController } from './health/health.controller';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { RecommendationsModule } from './recommendations/recommendations.module';
 import { QuotesModule } from './quotes/quotes.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -26,6 +27,7 @@ import { TestDrivesModule } from './test-drives/test-drives.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 600 }]),
     AuthModule,
     CatalogModule,
+    RecommendationsModule,
     PricingModule,
     PromotionsModule,
     NotificationsModule,

@@ -1,6 +1,23 @@
 import type { ReactNode } from "react";
 import "./globals.css";
-export const metadata = { title: "AutoNova — Intelligent Automotive Commerce", description: "Configure, quote and deposit for your next car." };
+import { TopBanner } from "@/components/common/TopBanner";
+import { Header } from "@/components/common/Header";
+import { Footer } from "@/components/common/Footer";
+
+export const metadata = {
+  title: "VinFast Auto Vietnam — Mãnh liệt Tinh thần Việt Nam | Trang chủ chính thức",
+  description: "Trang thương mại điện tử chính thức xe ô tô điện VinFast: VF 3, VF 5 Plus, VF 6, VF 7, VF 8, VF 9. Cấu hình xe, dự toán lăn bánh, vay trả góp và đặt cọc trực tuyến.",
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return (<html lang="vi"><body><header className="sticky top-0 z-10 border-b bg-white/90 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3"><a href="/" className="text-xl font-bold tracking-tight">AutoNova</a><nav className="hidden gap-6 md:flex"><a href="/vehicles">Xe</a><a href="/on-road">Lăn bánh</a><a href="/finance">Trả góp</a><a href="/dealers">Đại lý</a><a href="/test-drive">Lái thử</a><a href="/login">Đăng nhập</a></nav><a href="/vehicles" className="rounded-full bg-[#0a1633] px-4 py-2 text-white">Khám phá xe</a></div></header>{children}<footer className="border-t py-10 text-center text-sm text-neutral-500">© AutoNova — thương hiệu demo độc lập, không liên kết VinFast.</footer></body></html>);
+  return (
+    <html lang="vi" className="scroll-smooth">
+      <body className="min-h-screen flex flex-col bg-[#F8FAFC] text-[#191C1E] antialiased">
+        <TopBanner />
+        <Header />
+        <div className="flex-1">{children}</div>
+        <Footer />
+      </body>
+    </html>
+  );
 }

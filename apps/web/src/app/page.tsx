@@ -1,9 +1,28 @@
-import { apiFetch, type Vehicle } from "@/lib/api";
-// The homepage renders live catalogue data, so it must be requested per visit
-// rather than prerendered while the API may be unavailable.
+import { HomeHero } from "@/components/home/HomeHero";
+import { HomeLineup } from "@/components/home/HomeLineup";
+import { HomeCostCalculator } from "@/components/home/HomeCostCalculator";
+import { HomeChargingNetwork } from "@/components/home/HomeChargingNetwork";
+import { HomePillars } from "@/components/home/HomePillars";
+
 export const dynamic = "force-dynamic";
-export default async function Home() {
-  let vehicles: Vehicle[] = [];
-  try { const data = await apiFetch<{ data: Vehicle[] }>("/vehicles"); vehicles = data.data; } catch { vehicles = []; }
-  return (<main><section className="bg-[#0a1633] text-white"><div className="mx-auto max-w-7xl px-4 py-24"><p className="text-cyan-300">AutoNova — Intelligent Automotive Commerce</p><h1 className="mt-4 max-w-3xl text-5xl font-bold">Cấu hình xe của bạn. Đặt cọc trong vài phút.</h1><p className="mt-4 max-w-xl text-neutral-300">Nghiên cứu, cấu hình, dự toán lăn bánh & trả góp, đăng ký lái thử và đặt cọc online. Bàn giao tại đại lý.</p><div className="mt-8 flex gap-4"><a className="rounded-full bg-cyan-400 px-6 py-3 text-black" href="/vehicles">Xem xe</a><a className="rounded-full border border-white/30 px-6 py-3" href="/test-drive">Đăng ký lái thử</a></div></div></section><section className="mx-auto max-w-7xl px-4 py-16"><h2 className="text-3xl font-bold">Mẫu xe nổi bật</h2><div className="mt-8 grid gap-6 md:grid-cols-3">{vehicles.map((v) => (<a key={v.id} href={`/vehicles/${v.slug}`} className="rounded-2xl border p-6"><p className="text-sm text-neutral-500">{v.brand.name} · {v.category} · {v.seats} chỗ</p><h3 className="mt-2 text-2xl font-semibold">{v.name}</h3><p className="mt-2 text-cyan-700">Từ {v.trims[0]?.basePriceVnd} ₫</p></a>))}{vehicles.length === 0 && <p>Chưa có dữ liệu — hãy chạy seed.</p>}</div></section><section className="bg-neutral-100 py-16"><div className="mx-auto grid max-w-7xl gap-8 px-4 md:grid-cols-4">{["Cấu hình theo nhu cầu", "Báo giá minh bạch", "Đặt cọc bảo mật (sandbox)", "Hỗ trợ đại lý 24/7"].map((t) => (<div key={t} className="rounded-xl bg-white p-6 font-medium">{t}</div>))}</div></section></main>);
+
+export default function Home() {
+  return (
+    <main className="flex flex-col min-h-screen">
+      {/* 1. Hero Showcase with VF 7 & VF 3 */}
+      <HomeHero />
+
+      {/* 2. Complete EV Lineup with Category Tabs & Battery Toggle */}
+      <HomeLineup />
+
+      {/* 3. Interactive Battery & Operating Cost Savings Calculator */}
+      <HomeCostCalculator />
+
+      {/* 4. V-GREEN Nationwide Charging Network & Map */}
+      <HomeChargingNetwork />
+
+      {/* 5. "Mãnh liệt Tinh thần Việt Nam" Strategic Policies & Test Drive CTA */}
+      <HomePillars />
+    </main>
+  );
 }
